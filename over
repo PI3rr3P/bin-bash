@@ -1,0 +1,60 @@
+#!/bin/bash
+
+read -r -d'@' __USAGE__ << 'EOF'
+    Help 'over'
+    Get one word (or line) over N
+    
+    Optional :
+    -n 'int' : number of element selected
+    -i 'int' : start counting at this number
+    -I       : invert selection
+    -L       : get one line over N
+    -h       : print this message
+
+@ 
+EOF
+
+declare filedescriptor='/dev/stdin'
+declare -i ratio=2 counter=1 invert=1 start_counter=1
+declare ARG='' line='' word=''
+declare select_line=false
+
+while getopts 'hILn:i:' ARG; do
+    case "${ARG}" in 
+        'n')
+            ratio=${OPTARG}
+            ;;
+        'i')
+            start_counter=${OPTARG}
+            ;; 
+        'I')
+            invert=0
+            ;;
+        'L')
+            select_line=true
+            ;;
+        *|'h')
+            echo -e "${__USAGE__}"
+            exit 0
+            ;;
+    esac
+done
+
+while read -r line || [[ -n "${line}" ]]; do
+    if ${select_line}; then
+        counter=$(( ${counter} + 1 ))
+        if (( ${counter} % ${ratio} == ${invert} )); then
+           echo -e "${line}" 
+        fi
+    else
+        counter=${start_counter}
+        for word in ${line}; do
+            [[ -z "${word}" ]] && continue
+            counter=$(( ${counter} + 1 ))
+            if (( ${counter} % ${ratio} == ${invert} )); then
+                echo -en "${word} "
+            fi
+        done
+        echo ""
+    fi  
+done < ${filedescriptor}

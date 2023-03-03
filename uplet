@@ -1,0 +1,48 @@
+#!/bin/bash
+
+read -r -d'@' __USAGE__ << 'EOF'
+    Help 'uplet'
+    Turn a stream of words into a sequence line of n words
+
+    Optional :
+    -n 'int'      : number of element in uplet (defaut: 2) 
+    -f 'filename' : use a filename instead of stdin (default: stdin)
+    -s 'char'     : use this seperator between element of n-uplet (default ' ')
+    -h            : print this message
+  
+@
+EOF
+
+declare filedescriptor='/dev/stdin'
+declare -i nb_element=2 counter=0
+declare ARG='' line='' word='' separator=' '
+
+while getopts 'hn:f:s:' ARG; do
+	case "${ARG}" in
+        'n')
+            nb_element=${OPTARG}
+            ;;
+		'f')	
+			filedescriptor=${OPTARG} 
+            ;;
+		's')
+			separator=${OPTARG} 
+            ;;
+		*|'h')	
+			echo -e "${__USAGE__}"
+			exit 0
+            ;;
+	esac
+done
+
+while read -r line || [[ -n "${line}" ]]; do
+    while read -r -d' ' word || [[ -n "${word}" ]]; do
+        [[ -z ${word} ]] && continue
+        echo -en "${word}${separator}"
+        counter=$(( ${counter} + 1 ))
+        if (( ${counter} >= ${nb_element} )); then
+            counter=0
+            echo -e ""
+        fi
+    done <<< "${line}"
+done < "${filedescriptor}"

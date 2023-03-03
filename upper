@@ -1,0 +1,13 @@
+#!/bin/bash
+
+declare line=''
+
+if [[ -p /dev/stdin ]]; then
+    while read -r line || [[ -n "${line}" ]]; do
+        echo -e "${line^^}" 
+    done < /dev/stdin
+else
+    while read -r line || [[ -n "${line}" ]]; do
+        echo -e "${line^^}" 
+    done <<< "${@}"
+fi
