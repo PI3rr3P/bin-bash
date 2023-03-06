@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+
+read -r -d'@' __USAGE__ << 'EOF'
+    Help 'pselect' 
+        Select word according to a given pattern while processing a stream of
+        data. The pattern can be either list of symbol or list of digit.
+        
+        $1 : list of word position/index to keep
+
+          If it is a digit (n), then the digit correspond to index of the word in
+          the line. Therefore it's the nth word of the line than will be printed.
+          If it is a symbol (x or any [[:alpha:]]), then the word in the line at
+          the same position than the symbol in the string will be printed.
+          If it is the dummy symbol '_' then the word is skip or a dummy string
+          is printed instead.
+          Numbering start from 0. If a position required exceed the number of words
+          in the current line, then this position is ignore or "dummified".
+
+          ex: echo "a b c d e f" | pselect "6 x _ _ x 1"
+              > "f b e a"
+        
+        -d "" : in case of using the dummy symbol or if number if index is out
+            of range then use this default value instead.
+
+        -h  : Print this message
+@
+EOF
+
+declare pattern='' arg='' dummy='' dummy_position=''
+declare -ai selected 
+declare -a line
+declare -i index
+with_dummy=false
+
+if [[ ! "$1" =~ '-h' ]]; then
+    pattern=$1
+    shift
+fi
+while getopts "hd:" arg; do
+    case "${arg}" in
+        'd')
+            with_dummy=true
+            dummy=${OPTARG}
+            ;;
+        'h'|*)
+            echo -e "${__USAGE__}"
+            exit 0
+            ;;
+    esac
+done
+
+index=0
+for arg in ${pattern}; do
+    case "${arg}" in
+        '_') 
+            if ${with_dummy}; then
+                selected+=( "${index}" )
+                dummy_position+="${index} "
+            fi
+            ;;
+        [[:digit:]])
+            selected+=( "${arg}" )
+            ;;
+        [[:alpha:]])
+            selected+=( "${index}" )
+            ;;
+        [\(\)])
+            index=$(( ${index} - 1 ))
+            ;;
+    esac
+    index=$(( ${index} + 1 ))
+done
+
+echo -e "${selected[@]}"
+
+while read -r -a line || [[ -n "${line}" ]]; do
+    for index in ${selected[@]}; do
+        if (( ${index} >= ${#line[@]} )); then 
+            if ${with_dummy}; then
+                echo -en "${dummy} "
+            fi
+            continue 
+        fi
+        if ${with_dummy} && [[ "${dummy_position}" =~ "${index}" ]]; then
+            echo -en "${dummy} "
+        else
+            echo -en "${line[${index}]} "
+        fi
+    done
+    echo -e ''
+done < /dev/stdin
