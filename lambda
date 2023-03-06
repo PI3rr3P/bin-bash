@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+set -e 
+
+read -r -d'@' __USAGE__ << 'EOF'
+    Help 'plambda' (pipe-lambda)
+        Create a bash function "on-the-fly" to process incomming stream of data
+        (through stdin)
+
+        $1 (str) : body of the function
+            The local function created is call 'lbd' (usefull for recursion)
+            Like for the definition of a shell function in command line, each 
+            commands are separated by a ';' (avoid newlines). 
+            
+            In the body definition, the return statement will be added 
+            automatically as well as the enclosing '{' and '}'. Also, do not try
+            subfunction or renamming the function. You just need to provide the
+            bulk of the function. Some commands are forbidden to avoid madness,
+            among other :
+            'rm, exec, eval, set, function, ()'
+
+            ex: ... | plambda '(( $1 % 2 )) && echo $1 || echo -e $(( $1 + $2 ))'
+
+        -h print this message
+@
+EOF
+
+declare -- prog=$1
+declare -- line=''
+
+# Check script argument
+if [[ "${prog}" == '-h' ]]; then
+    echo -e "${__USAGE__}"
+    exit 0
+fi
+if (( $# < 1 )); then
+    echo -e "Error plambda : you must provide a body function"
+    echo -e "${__USAGE__}"
+    exit 1
+fi
+
+# Sanitize program of the lambda
+prog=$( echo ${prog} | tr $'\n' ';' ) # apply triming
+if [[ "${prog}" =~ (rm[[:space:]]*-|eval |exec |set |function|/(/) ) ]]; then
+    echo "Error plambda : invalid program, contain forbidden command : "/
+         "rm, exec, eval, set, function, ()"
+    exit 1
+fi
+prog=${prog//'declare'/'local'}
+[[ "${prog:0:1}" == '{' ]] && prog=${prog#'{'}
+[[ "${prog: -1}" == '}' ]] && prog=${prog%'}'}
+prog=${prog//';'/' ; '}
+prog=$( echo ${prog} ) # apply triming (if {} has been remove)
+[[ "${prog: -1}" != ';' ]] && prog+=' ;'
+[[ ! "${prog}" =~ 'return 0' ]] && prog+=" return 0 ;"
+
+# Define new temporary function
+eval "lbd(){ ${prog} }"
+
+# Process the stream with that new function
+while read -r line || [[ -n "${line}" ]]; do
+    eval "lbd ${line}" || exit 1
+done < /dev/stdin
