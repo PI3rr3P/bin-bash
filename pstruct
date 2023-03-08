@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+
+read -r -d'@' __USAGE__ << 'EOF'
+    Help 'pstruct'
+        Re structure a stream of data of a given shape, according to another
+        shape user specified
+
+    Mandatory arguments:
+        -i 'str' : structure of the input
+            the structure can be declare of sevaral lines
+            - a '/' mean new line
+            - a '_' is a dummy word and mean skip that word
+            - a '=' mean you keep the whole line ???
+            - a '~' mean you skip the whole line ??? -> JUST '_ / / _'
+            - a '1..3' mean you affect conscecutive symbol ???
+            - any [[:alnum:]] is a symbol you can refer later
+        -o 'str' : structure of the output
+            the structure use the symbol defined in the input pattern 
+            description 
+
+    example : 
+        echo -e "word0 word1 word2\\n" \
+                "      word3 word4\\n" \
+                "      word5 word6\\n" \
+        | struct -i 'a _ b/_ c/d _'  -o 'a c/b a'
+
+        >
+        >
+@
+EOF
+
+declare -A pos_to_symbol symbol_val 
+declare -a output
+declare -i nb_line=0 nb_word=0 nb_line_max=1
+declare -- line='' arg='' input_pattern='' output_pattern='' list_coord=''
+
+# Read argument
+while getopts "hi:o:" arg;  do
+    case "${arg}" in
+        'i')
+            input_pattern=${OPTARG}
+            ;;
+        'o')
+            output_pattern=${OPTARG}
+            ;; 
+        'h'|*)
+            echo -e "${__USAGE__}"
+            exit 0
+            ;;
+    esac
+done
+
+input_pattern=$( echo -e ${input_pattern//'/'/' / '} )
+output_pattern=$( echo -e ${output_pattern//'/'/' / '} )
+
+# Read input pattern
+for arg in ${input_pattern}; do
+    case "${arg}" in
+        '/')
+            nb_line=$(( ${nb_line} + 1 ))
+            nb_word=-1
+            ;;
+        '_')
+            ;;
+        '='[[:digit:]+])
+            pos_to_symbol["=${nb_line}"]="=" 
+            list_coord+="${nb_line},= "
+            ;;
+        '~')
+            ;;    
+        [[:alnum:]+])
+            pos_to_symbol[${nb_line},${nb_word}]="${arg}" 
+            symbol_val[${arg}]='_'
+            list_coord+="${nb_line},${nb_word} "
+            ;;
+        *)
+            echo -e "${__USAGE__}"
+            exit 1
+            ;;
+    esac
+    nb_word=$(( ${nb_word} + 1 ))
+done
+nb_line_max=$(( ${nb_line} + 1 ))
+
+# Read output pattern
+for arg in ${output_pattern}; do
+    case "${arg}" in
+        [[:alnum:]+])
+            output+=( "${arg}" )
+            ;;
+        '/')
+            output+=( 'newline' )
+            ;;
+        *)
+            echo -e "${__USAGE__}"
+            exit 1
+            ;;
+    esac 
+    if [[ ! "${input_pattern}" =~ "${arg}" ]]; then
+        echo -e "Error, symbol '${arg}' undefined in incomming pattern :"
+        echo -e "'${input_pattern}'"
+        exit 1
+    fi
+done
+output+=( 'newline' )
+
+# Read and processing of the stream
+nb_word=0
+nb_line=0
+while read -r line || [[ -n "${line}" ]]; do    
+    if [[ "${list_coord}" =~ "${line}," ]]; then
+        symbol_val["=${nb_line}"]="${line}"
+    else
+        for arg in ${line}; do
+            if [[ "${list_coord}" =~ "${nb_line},${nb_word}" ]]; then 
+                symbol_val[${pos_to_symbol[${nb_line},${nb_word}]}]=${arg}
+            fi
+            nb_word=$(( ${nb_word} + 1 ))
+        done
+    fi
+    nb_word=0
+    nb_line=$(( ${nb_line} + 1 ))
+    if (( ${nb_line} >= ${nb_line_max} )); then
+        for sym in ${output[@]}; do
+            if [[ "${sym}" == 'newline' ]]; then
+                echo -e ''
+            else
+                echo -en "${symbol_val[${sym}]} "
+            fi
+        done
+        nb_line=0
+    fi
+done < /dev/stdin
